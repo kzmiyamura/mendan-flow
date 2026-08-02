@@ -411,6 +411,7 @@ export default function InterviewCopilot({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                   if (e.key === "Enter" && password && !busy) {
                     e.preventDefault();
                     importResume(pendingFile, password);
@@ -482,6 +483,8 @@ export default function InterviewCopilot({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
+              // IME変換中のEnter（確定操作）では送信しない
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
               if (e.key === "Enter" && input.trim() && !busy) {
                 e.preventDefault();
                 send(input.trim());
