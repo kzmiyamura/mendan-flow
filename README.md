@@ -20,16 +20,23 @@ SESのIT面談（クライアント面談・顔合わせ）の**準備**から**
 - 振り返りと次回への改善メモ
 - 面談履歴の一覧・検索
 
+### AI壁打ち（質問を一緒に考える）
+- 候補者の経歴メモ・深掘りポイントを元に、Claudeが候補者固有の質問を提案
+- 「もっとチーム面を聞きたい」など方向性を伝えて対話的にリストを練り上げる
+- 提案は「採用」で質問リストへ、「スキップ」で却下
+
 ## 技術スタック
 
 - [Next.js](https://nextjs.org)（App Router / TypeScript）
 - Tailwind CSS
+- [Claude API](https://platform.claude.com)（`@anthropic-ai/sdk` / claude-opus-4-8）
 
 ## 開発
 
 ```bash
 npm install
+cp .env.example .env.local   # ANTHROPIC_API_KEY を設定（AI壁打ち機能に必要）
 npm run dev
 ```
 
-http://localhost:3000 で起動します。
+http://localhost:3000 で起動します。APIキーがなくてもAI壁打ち以外の機能は動作します。

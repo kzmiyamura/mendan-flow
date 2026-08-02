@@ -18,6 +18,7 @@ import {
   POSITION_LABELS,
   SCORE_AXES,
 } from "@/lib/data";
+import QuestionBrainstorm from "@/components/QuestionBrainstorm";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none";
@@ -200,6 +201,18 @@ export default function InterviewDetail() {
               ))}
             </ul>
           </section>
+
+          <QuestionBrainstorm
+            interview={interview}
+            onAdopt={(text, intent) =>
+              update({
+                questions: [
+                  ...interview.questions,
+                  { id: uid(), text, intent, asked: false, note: "" },
+                ],
+              })
+            }
+          />
 
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold">質問リスト</h2>
