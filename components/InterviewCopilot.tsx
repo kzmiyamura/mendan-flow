@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CopilotMessage, Interview } from "@/lib/types";
 import { POSITION_LABELS } from "@/lib/data";
-import { uid } from "@/lib/storage";
+import {
+  getInterviewerContextSnapshot,
+  getServerInterviewerContextSnapshot,
+  saveInterviewerContext,
+  subscribeInterviews,
+  uid,
+} from "@/lib/storage";
 import type { SuggestResponse } from "@/app/api/suggest/route";
 
 const QUICK_CHIPS = [
@@ -34,6 +40,11 @@ export default function InterviewCopilot({
   onUpdate: (patch: Partial<Interview>) => void;
 }) {
   const copilot = interview.copilot;
+  const interviewerContext = useSyncExternalStore(
+    subscribeInterviews,
+    getInterviewerContextSnapshot,
+    getServerInterviewerContextSnapshot
+  );
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +81,7 @@ export default function InterviewCopilot({
             profileNote: interview.profileNote,
             focusPoints: interview.focusPoints,
             plan: interview.plan,
+            interviewerContext,
             existingQuestions: interview.questions.map((q) => q.text),
           },
           chat: next,
@@ -125,6 +137,22 @@ export default function InterviewCopilot({
         <span className="text-xs text-slate-500">
           進め方・時間配分・質問をClaudeと会話しながら決めます
         </span>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+        <label className="block text-xs font-semibold text-slate-700">
+          あなたのチーム状況・重視したい観点
+          <span className="ml-1 font-normal text-slate-400">
+            （全面接で共有・設計に最優先で反映されます）
+          </span>
+        </label>
+        <textarea
+          value={interviewerContext}
+          onChange={(e) => saveInterviewerContext(e.target.value)}
+          rows={3}
+          placeholder="例: 現状の部署では一人で客先チームに入ってもらう可能性が高い。後方支援は必ずする。一人で挑戦しながら進められるメンタルと、人に聞く・自分で調べる・AIに聞ける柔軟性を重視したい。"
+          className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
+        />
       </div>
 
       {!started && (

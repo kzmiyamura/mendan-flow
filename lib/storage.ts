@@ -55,6 +55,30 @@ function saveInterviews(list: Interview[]) {
   emit();
 }
 
+const CONTEXT_KEY = "mendan-flow:interviewer-context";
+let contextCache: string | null = null;
+
+/** 面接官のチーム状況・重視したい観点（全面接で共有） */
+export function getInterviewerContextSnapshot(): string {
+  if (contextCache === null) {
+    contextCache =
+      typeof window === "undefined"
+        ? ""
+        : (localStorage.getItem(CONTEXT_KEY) ?? "");
+  }
+  return contextCache;
+}
+
+export function getServerInterviewerContextSnapshot(): string {
+  return "";
+}
+
+export function saveInterviewerContext(value: string) {
+  localStorage.setItem(CONTEXT_KEY, value);
+  contextCache = value;
+  listeners.forEach((l) => l());
+}
+
 export function getInterview(id: string): Interview | undefined {
   return loadInterviews().find((i) => i.id === id);
 }
