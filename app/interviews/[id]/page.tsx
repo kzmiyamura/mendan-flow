@@ -152,7 +152,12 @@ export default function InterviewDetail() {
       </div>
 
       {tab === "prep" && (
-        <div className="space-y-6">
+        <div className="gap-6 space-y-6 lg:grid lg:grid-cols-5 lg:items-start lg:space-y-0">
+          <div className="lg:col-span-3">
+            <InterviewCopilot interview={interview} onUpdate={update} />
+          </div>
+
+          <div className="space-y-6 lg:col-span-2">
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">経歴・スキルシートのメモ</h2>
@@ -220,12 +225,10 @@ export default function InterviewDetail() {
             </ul>
           </section>
 
-          <InterviewCopilot interview={interview} onUpdate={update} />
-
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold">面談の進め方</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              アジェンダ・時間配分。上の相談で「面談プランに反映」すると、ここに入ります。
+              アジェンダ・時間配分。チャットで「面談プランに反映」すると、ここに入ります。
             </p>
             <textarea
               value={interview.plan}
@@ -305,6 +308,7 @@ export default function InterviewDetail() {
               </button>
             </div>
           </section>
+          </div>
         </div>
       )}
 

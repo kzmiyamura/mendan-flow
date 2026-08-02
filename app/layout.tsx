@@ -30,7 +30,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">
         <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex h-14 max-w-4xl items-center px-4">
+          <div className="mx-auto flex h-14 max-w-6xl items-center px-4">
             <Link href="/" className="text-lg font-bold tracking-tight">
               Mendan<span className="text-sky-600">Flow</span>
             </Link>
@@ -39,7 +39,7 @@ export default function RootLayout({
             </span>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
           {children}
         </main>
       </body>

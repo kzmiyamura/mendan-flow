@@ -106,7 +106,11 @@ export default function InterviewCopilot({
     }
   }
 
-  function markHandled(key: string, status: "adopted" | "skipped", extra?: Partial<Interview>) {
+  function markHandled(
+    key: string,
+    status: "adopted" | "skipped",
+    extra?: Partial<Interview>
+  ) {
     onUpdate({
       ...extra,
       copilot: {
@@ -116,76 +120,66 @@ export default function InterviewCopilot({
     });
   }
 
-  function adoptQuestion(key: string, text: string, intent: string) {
-    markHandled(key, "adopted", {
-      questions: [
-        ...interview.questions,
-        { id: uid(), text, intent, asked: false, note: "" },
-      ],
-    });
-  }
-
-  function adoptPlan(key: string, plan: string) {
-    markHandled(key, "adopted", { plan });
-  }
-
-  const started = copilot.messages.length > 0 || loading;
-
   return (
-    <section className="rounded-lg border border-sky-200 bg-sky-50/50 p-4">
-      <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold">🤝 面談設計を一緒に進める</h2>
-        <span className="text-xs text-slate-500">
-          進め方・時間配分・質問をClaudeと会話しながら決めます
-        </span>
+    <section className="flex h-[38rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-6 lg:h-[calc(100vh-7rem)]">
+      {/* ヘッダー */}
+      <div className="border-b border-slate-200 px-4 py-3">
+        <h2 className="text-sm font-semibold">🤝 面談設計アシスタント</h2>
+        <details open={!interviewerContext}>
+          <summary className="mt-1 cursor-pointer text-xs font-medium text-sky-700">
+            あなたのチーム状況・重視したい観点
+            <span className="ml-1 font-normal text-slate-400">
+              {interviewerContext ? "（設定済み・クリックで編集）" : "（未設定 — 最初に書くのがおすすめ）"}
+            </span>
+          </summary>
+          <textarea
+            value={interviewerContext}
+            onChange={(e) => saveInterviewerContext(e.target.value)}
+            rows={3}
+            placeholder="例: 一人で客先チームに入る可能性が高い。後方支援は必ずする。単独で挑戦できるメンタルと、人に聞く・調べる・AIを使う柔軟性を重視。"
+            className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-sky-500 focus:outline-none"
+          />
+        </details>
       </div>
 
-      <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-        <label className="block text-xs font-semibold text-slate-700">
-          あなたのチーム状況・重視したい観点
-          <span className="ml-1 font-normal text-slate-400">
-            （全面接で共有・設計に最優先で反映されます）
-          </span>
-        </label>
-        <textarea
-          value={interviewerContext}
-          onChange={(e) => saveInterviewerContext(e.target.value)}
-          rows={3}
-          placeholder="例: 現状の部署では一人で客先チームに入ってもらう可能性が高い。後方支援は必ずする。一人で挑戦しながら進められるメンタルと、人に聞く・自分で調べる・AIに聞ける柔軟性を重視したい。"
-          className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none"
-        />
-      </div>
+      {/* メッセージエリア */}
+      <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
+        {copilot.messages.length === 0 && !loading && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <p className="text-sm text-slate-500">
+              この候補者の面談の進め方・時間配分・質問を
+              <br />
+              会話しながら一緒に決めていきます
+            </p>
+            <button
+              onClick={() => send(null)}
+              className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700"
+            >
+              面談設計を始める
+            </button>
+          </div>
+        )}
 
-      {!started && (
-        <button
-          onClick={() => send(null)}
-          className="mt-3 w-full rounded-lg border border-sky-600 bg-white py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100"
-        >
-          この候補者の面談設計を始める
-        </button>
-      )}
-
-      {copilot.messages.length > 0 && (
-        <div className="mt-3 max-h-[32rem] space-y-3 overflow-y-auto pr-1">
-          {copilot.messages.map((msg, mi) => {
-            if (msg.role === "user") {
-              return (
-                <div
-                  key={mi}
-                  className="ml-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <span className="mr-1 text-xs text-slate-400">あなた</span>
-                  <span className="whitespace-pre-wrap">{msg.content}</span>
-                </div>
-              );
-            }
-            const parsed = parseAssistant(msg.content);
-            if (!parsed) return null;
+        {copilot.messages.map((msg, mi) => {
+          if (msg.role === "user") {
             return (
-              <div key={mi} className="mr-6 space-y-2">
-                <div className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm">
-                  <span className="mr-1 text-xs text-sky-600">Claude</span>
-                  <span className="whitespace-pre-wrap">{parsed.reply}</span>
+              <div key={mi} className="flex justify-end">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-sky-600 px-3.5 py-2 text-sm text-white">
+                  {msg.content}
+                </div>
+              </div>
+            );
+          }
+          const parsed = parseAssistant(msg.content);
+          if (!parsed) return null;
+          return (
+            <div key={mi} className="flex gap-2">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
+                C
+              </div>
+              <div className="max-w-[85%] flex-1 space-y-2">
+                <div className="w-fit whitespace-pre-wrap rounded-2xl rounded-tl-md border border-slate-200 bg-white px-3.5 py-2 text-sm">
+                  {parsed.reply}
                 </div>
 
                 {parsed.contextUpdate && (
@@ -214,7 +208,9 @@ export default function InterviewCopilot({
                     adoptedLabel="✓ 面談プランに反映済み"
                     color="indigo"
                     status={copilot.handled[`${mi}:plan`]}
-                    onAdopt={() => adoptPlan(`${mi}:plan`, parsed.planUpdate)}
+                    onAdopt={() =>
+                      markHandled(`${mi}:plan`, "adopted", { plan: parsed.planUpdate })
+                    }
                     onSkip={() => markHandled(`${mi}:plan`, "skipped")}
                   />
                 )}
@@ -227,14 +223,12 @@ export default function InterviewCopilot({
                       key={key}
                       className={`rounded-lg border p-3 ${
                         status === "skipped"
-                          ? "border-slate-200 bg-slate-50 opacity-60"
+                          ? "border-slate-200 bg-slate-100 opacity-60"
                           : "border-sky-300 bg-white"
                       }`}
                     >
                       <div className="text-sm font-medium">{s.text}</div>
-                      <div className="mt-0.5 text-xs text-sky-700">
-                        ねらい: {s.intent}
-                      </div>
+                      <div className="mt-0.5 text-xs text-sky-700">ねらい: {s.intent}</div>
                       <div className="mt-2 flex items-center gap-2">
                         {status === "adopted" && (
                           <span className="text-xs font-medium text-emerald-600">
@@ -247,7 +241,20 @@ export default function InterviewCopilot({
                         {!status && (
                           <>
                             <button
-                              onClick={() => adoptQuestion(key, s.text, s.intent)}
+                              onClick={() =>
+                                markHandled(key, "adopted", {
+                                  questions: [
+                                    ...interview.questions,
+                                    {
+                                      id: uid(),
+                                      text: s.text,
+                                      intent: s.intent,
+                                      asked: false,
+                                      note: "",
+                                    },
+                                  ],
+                                })
+                              }
                               className="rounded-md bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-sky-700"
                             >
                               質問リストに採用
@@ -265,70 +272,68 @@ export default function InterviewCopilot({
                   );
                 })}
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
 
-          {loading && (
-            <div className="flex items-center gap-2 text-sm text-slate-500">
+        {loading && (
+          <div className="flex gap-2">
+            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-600 text-xs font-bold text-white">
+              C
+            </div>
+            <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-500">
               <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-sky-600 border-t-transparent" />
               考え中…
             </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-      )}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
 
-      {!copilot.messages.length && loading && (
-        <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-sky-600 border-t-transparent" />
-          候補者情報を読んで叩き台を作成中…
-        </div>
-      )}
-
-      {error && (
-        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {error}
-        </div>
-      )}
-
-      {started && (
-        <>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+      {/* 入力エリア */}
+      <div className="border-t border-slate-200 p-3">
+        {error && (
+          <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {error}
+          </div>
+        )}
+        {copilot.messages.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
             {QUICK_CHIPS.map((chip) => (
               <button
                 key={chip}
                 onClick={() => !loading && send(chip)}
                 disabled={loading}
-                className="rounded-full border border-sky-300 bg-white px-3 py-1 text-xs text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
+                className="rounded-full border border-sky-300 bg-white px-3 py-1 text-xs text-sky-700 transition hover:bg-sky-50 disabled:opacity-50"
               >
                 {chip}
               </button>
             ))}
           </div>
-          <div className="mt-2 flex gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && input.trim() && !loading) {
-                  e.preventDefault();
-                  send(input.trim());
-                }
-              }}
-              placeholder="例: 面談は45分。技術深掘りを厚めにしたい"
-              disabled={loading}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none disabled:bg-slate-100"
-            />
-            <button
-              onClick={() => input.trim() && send(input.trim())}
-              disabled={loading || !input.trim()}
-              className="shrink-0 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:bg-slate-300"
-            >
-              送信
-            </button>
-          </div>
-        </>
-      )}
+        )}
+        <div className="flex gap-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && input.trim() && !loading) {
+                e.preventDefault();
+                send(input.trim());
+              }
+            }}
+            placeholder="例: 面談は60分。技術の話ばかりにしたくない"
+            disabled={loading}
+            className="w-full rounded-full border border-slate-300 bg-white px-4 py-2 text-sm focus:border-sky-500 focus:outline-none disabled:bg-slate-100"
+          />
+          <button
+            onClick={() => input.trim() && send(input.trim())}
+            disabled={loading || !input.trim()}
+            className="shrink-0 rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:bg-slate-300"
+          >
+            送信
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -374,7 +379,7 @@ function ProposalCard({
     <div
       className={`rounded-lg border p-3 ${
         status === "skipped"
-          ? "border-slate-200 bg-slate-50 opacity-60"
+          ? "border-slate-200 bg-slate-100 opacity-60"
           : `${c.border} ${c.bg}`
       }`}
     >
