@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
-import { Interview, Judgement, Question, Scores } from "@/lib/types";
+import { Interview, Judgement, Scores } from "@/lib/types";
 import {
   deleteInterview,
   getInterviewsSnapshot,
   getServerInterviewsSnapshot,
   subscribeInterviews,
-  uid,
   upsertInterview,
 } from "@/lib/storage";
 import {
@@ -19,7 +18,6 @@ import {
   SCORE_AXES,
 } from "@/lib/data";
 import InterviewCopilot from "@/components/InterviewCopilot";
-import ResumeImport from "@/components/ResumeImport";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none";
@@ -38,7 +36,6 @@ export default function InterviewDetail() {
     () => false
   );
   const [tabChoice, setTabChoice] = useState<"prep" | "result" | null>(null);
-  const [newQuestion, setNewQuestion] = useState("");
 
   const interview: Interview | null =
     interviews.find((i) => i.id === id) ?? null;
@@ -62,14 +59,6 @@ export default function InterviewDetail() {
     upsertInterview({ ...interview, ...patch });
   }
 
-  function updateQuestion(qid: string, patch: Partial<Question>) {
-    update({
-      questions: interview!.questions.map((q) =>
-        q.id === qid ? { ...q, ...patch } : q
-      ),
-    });
-  }
-
   function updateScore(key: keyof Scores, value: number) {
     update({
       result: {
@@ -79,28 +68,14 @@ export default function InterviewDetail() {
     });
   }
 
-  function addQuestion() {
-    const text = newQuestion.trim();
-    if (!text) return;
-    update({
-      questions: [
-        ...interview!.questions,
-        { id: uid(), text, intent: "", asked: false, note: "" },
-      ],
-    });
-    setNewQuestion("");
-  }
-
   function handleDelete() {
     if (!confirm(`「${interview!.candidateName}」の面接を削除しますか？`)) return;
     deleteInterview(interview!.id);
     router.push("/");
   }
 
-  const doneCount = interview.checklist.filter((c) => c.done).length;
-
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-4">
       <div>
         <Link href="/" className="text-sm text-slate-500 hover:text-slate-700">
           ← 一覧に戻る
@@ -152,164 +127,7 @@ export default function InterviewDetail() {
       </div>
 
       {tab === "prep" && (
-        <div className="gap-6 space-y-6 lg:grid lg:grid-cols-5 lg:items-start lg:space-y-0">
-          <div className="lg:col-span-3">
-            <InterviewCopilot interview={interview} onUpdate={update} />
-          </div>
-
-          <div className="space-y-6 lg:col-span-2">
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">経歴・スキルシートのメモ</h2>
-            </div>
-            <div className="mt-2">
-              <ResumeImport
-                position={`${POSITION_LABELS[interview.position]}${interview.positionDetail ? ` / ${interview.positionDetail}` : ""}`}
-                onImported={(result) =>
-                  update({
-                    profileNote: interview.profileNote
-                      ? `${interview.profileNote}\n\n--- 経歴書から自動生成 ---\n${result.profileNote}`
-                      : result.profileNote,
-                    focusPoints: interview.focusPoints
-                      ? `${interview.focusPoints}\n\n--- 経歴書から自動生成 ---\n${result.focusPoints}`
-                      : result.focusPoints,
-                  })
-                }
-              />
-            </div>
-            <textarea
-              value={interview.profileNote}
-              onChange={(e) => update({ profileNote: e.target.value })}
-              rows={4}
-              placeholder="経歴書を読んで気になった点、確認したい経験など"
-              className={`${inputClass} mt-2`}
-            />
-            <h2 className="mt-4 text-sm font-semibold">深掘りポイント</h2>
-            <textarea
-              value={interview.focusPoints}
-              onChange={(e) => update({ focusPoints: e.target.value })}
-              rows={3}
-              placeholder="例: マイクロサービス移行の役割が曖昧 → 実際の担当範囲を確認"
-              className={`${inputClass} mt-2`}
-            />
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold">
-              準備チェックリスト（{doneCount}/{interview.checklist.length}）
-            </h2>
-            <ul className="mt-2 space-y-1">
-              {interview.checklist.map((item) => (
-                <li key={item.id}>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
-                    <input
-                      type="checkbox"
-                      checked={item.done}
-                      onChange={(e) =>
-                        update({
-                          checklist: interview.checklist.map((c) =>
-                            c.id === item.id
-                              ? { ...c, done: e.target.checked }
-                              : c
-                          ),
-                        })
-                      }
-                      className="h-4 w-4 accent-sky-600"
-                    />
-                    <span className={item.done ? "text-slate-400 line-through" : ""}>
-                      {item.label}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold">面談の進め方</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              アジェンダ・時間配分。チャットで「面談プランに反映」すると、ここに入ります。
-            </p>
-            <textarea
-              value={interview.plan}
-              onChange={(e) => update({ plan: e.target.value })}
-              rows={interview.plan ? 8 : 3}
-              placeholder="例: 冒頭5分 アイスブレイク / 15分 直近PJ深掘り / ..."
-              className={`${inputClass} mt-2`}
-            />
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold">質問リスト</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              面接中はチェックを入れながら進められます。メモ欄は結果記録にも表示されます。
-            </p>
-            <ul className="mt-3 space-y-3">
-              {interview.questions.map((q, idx) => (
-                <li key={q.id} className="rounded-md border border-slate-100 bg-slate-50 p-3">
-                  <div className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={q.asked}
-                      onChange={(e) => updateQuestion(q.id, { asked: e.target.checked })}
-                      className="mt-1 h-4 w-4 accent-sky-600"
-                      title="聞いた"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className={`text-sm ${q.asked ? "text-slate-400" : ""}`}>
-                        <span className="mr-1 text-xs text-slate-400">Q{idx + 1}.</span>
-                        {q.text}
-                      </div>
-                      {q.intent && (
-                        <div className="mt-0.5 text-xs text-sky-700">
-                          ねらい: {q.intent}
-                        </div>
-                      )}
-                      <input
-                        value={q.note}
-                        onChange={(e) => updateQuestion(q.id, { note: e.target.value })}
-                        placeholder="回答メモ"
-                        className="mt-2 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:border-sky-500 focus:outline-none"
-                      />
-                    </div>
-                    <button
-                      onClick={() =>
-                        update({
-                          questions: interview.questions.filter((x) => x.id !== q.id),
-                        })
-                      }
-                      className="text-xs text-slate-400 hover:text-rose-500"
-                      title="削除"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-3 flex gap-2">
-              <input
-                value={newQuestion}
-                onChange={(e) => setNewQuestion(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addQuestion();
-                  }
-                }}
-                placeholder="質問を追加"
-                className={inputClass}
-              />
-              <button
-                onClick={addQuestion}
-                className="shrink-0 rounded-lg border border-sky-600 px-4 py-2 text-sm font-medium text-sky-600 transition hover:bg-sky-50"
-              >
-                追加
-              </button>
-            </div>
-          </section>
-          </div>
-        </div>
+        <InterviewCopilot interview={interview} onUpdate={update} />
       )}
 
       {tab === "result" && (
@@ -405,22 +223,6 @@ export default function InterviewDetail() {
               />
             </div>
           </section>
-
-          {interview.questions.some((q) => q.note) && (
-            <section className="rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="text-sm font-semibold">面接中の回答メモ</h2>
-              <ul className="mt-2 space-y-2 text-sm">
-                {interview.questions
-                  .filter((q) => q.note)
-                  .map((q) => (
-                    <li key={q.id} className="rounded-md bg-slate-50 p-2">
-                      <div className="text-xs text-slate-500">{q.text}</div>
-                      <div className="mt-0.5">{q.note}</div>
-                    </li>
-                  ))}
-              </ul>
-            </section>
-          )}
 
           <button
             onClick={() =>

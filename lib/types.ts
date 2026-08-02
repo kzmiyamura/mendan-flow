@@ -56,6 +56,8 @@ export interface Interview {
   /** 面談の進め方（アジェンダ・時間配分・重点テーマ） */
   plan: string;
   copilot: CopilotState;
+  /** 最終アウトプット: 時間配分＋項目＋質問がまとまった面談シート */
+  sheet: string;
   checklist: ChecklistItem[];
   questions: Question[];
   result: InterviewResult;

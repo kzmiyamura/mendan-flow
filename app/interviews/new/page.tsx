@@ -33,6 +33,7 @@ export default function NewInterview() {
       focusPoints: "",
       plan: "",
       copilot: { messages: [], handled: {} },
+      sheet: "",
       checklist: DEFAULT_CHECKLIST.map((label) => ({
         id: uid(),
         label,

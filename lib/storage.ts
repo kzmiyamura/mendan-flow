@@ -44,6 +44,7 @@ export function loadInterviews(): Interview[] {
       ...i,
       plan: i.plan ?? "",
       copilot: i.copilot ?? { messages: [], handled: {} },
+      sheet: i.sheet ?? "",
     }));
   } catch {
     return [];
