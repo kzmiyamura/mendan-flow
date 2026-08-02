@@ -58,6 +58,8 @@ export default function InterviewCopilot({
     getServerInterviewerContextSnapshot
   );
   const [input, setInput] = useState("");
+  // 開閉は内容と連動させない（連動させると1文字入力した瞬間に閉じてフォーカスが飛ぶ）
+  const [ctxOpen, setCtxOpen] = useState(() => !getInterviewerContextSnapshot());
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,13 +204,16 @@ export default function InterviewCopilot({
     <section className="flex h-[calc(100vh-14rem)] min-h-[30rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       {/* ヘッダー: チーム状況（折りたたみ） */}
       <div className="border-b border-slate-200 px-4 py-2.5">
-        <details open={!interviewerContext}>
-          <summary className="cursor-pointer text-xs font-medium text-sky-700">
-            あなたのチーム状況・重視したい観点
-            <span className="ml-1 font-normal text-slate-400">
-              {interviewerContext ? "（設定済み）" : "（未設定）"}
-            </span>
-          </summary>
+        <button
+          onClick={() => setCtxOpen(!ctxOpen)}
+          className="text-xs font-medium text-sky-700 hover:text-sky-900"
+        >
+          {ctxOpen ? "▾" : "▸"} あなたのチーム状況・重視したい観点
+          <span className="ml-1 font-normal text-slate-400">
+            {interviewerContext ? "（設定済み）" : "（未設定）"}
+          </span>
+        </button>
+        {ctxOpen && (
           <textarea
             value={interviewerContext}
             onChange={(e) => saveInterviewerContext(e.target.value)}
@@ -216,7 +221,7 @@ export default function InterviewCopilot({
             placeholder="例: 一人で客先チームに入る可能性が高い。後方支援は必ずする。単独で挑戦できるメンタルと、人に聞く・調べる・AIを使う柔軟性を重視。"
             className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs focus:border-sky-500 focus:outline-none"
           />
-        </details>
+        )}
       </div>
 
       {/* メッセージエリア */}
