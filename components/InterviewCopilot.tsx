@@ -26,6 +26,7 @@ function parseAssistant(content: string): SuggestResponse | null {
       reply: parsed.reply,
       suggestions: parsed.suggestions ?? [],
       planUpdate: parsed.planUpdate ?? "",
+      contextUpdate: parsed.contextUpdate ?? "",
     };
   } catch {
     return null;
@@ -187,9 +188,31 @@ export default function InterviewCopilot({
                   <span className="whitespace-pre-wrap">{parsed.reply}</span>
                 </div>
 
+                {parsed.contextUpdate && (
+                  <ProposalCard
+                    icon="👤"
+                    title="チーム状況メモの更新提案"
+                    body={parsed.contextUpdate}
+                    adoptLabel="メモに反映"
+                    adoptedLabel="✓ チーム状況メモに反映済み"
+                    color="teal"
+                    status={copilot.handled[`${mi}:ctx`]}
+                    onAdopt={() => {
+                      saveInterviewerContext(parsed.contextUpdate);
+                      markHandled(`${mi}:ctx`, "adopted");
+                    }}
+                    onSkip={() => markHandled(`${mi}:ctx`, "skipped")}
+                  />
+                )}
+
                 {parsed.planUpdate && (
-                  <PlanCard
-                    plan={parsed.planUpdate}
+                  <ProposalCard
+                    icon="📋"
+                    title="面談プランの提案"
+                    body={parsed.planUpdate}
+                    adoptLabel="面談プランに反映"
+                    adoptedLabel="✓ 面談プランに反映済み"
+                    color="indigo"
                     status={copilot.handled[`${mi}:plan`]}
                     onAdopt={() => adoptPlan(`${mi}:plan`, parsed.planUpdate)}
                     onSkip={() => markHandled(`${mi}:plan`, "skipped")}
@@ -310,34 +333,60 @@ export default function InterviewCopilot({
   );
 }
 
-function PlanCard({
-  plan,
+const CARD_COLORS = {
+  indigo: {
+    border: "border-indigo-300",
+    bg: "bg-indigo-50/50",
+    title: "text-indigo-700",
+    button: "bg-indigo-600 hover:bg-indigo-700",
+  },
+  teal: {
+    border: "border-teal-300",
+    bg: "bg-teal-50/50",
+    title: "text-teal-700",
+    button: "bg-teal-600 hover:bg-teal-700",
+  },
+} as const;
+
+function ProposalCard({
+  icon,
+  title,
+  body,
+  adoptLabel,
+  adoptedLabel,
+  color,
   status,
   onAdopt,
   onSkip,
 }: {
-  plan: string;
+  icon: string;
+  title: string;
+  body: string;
+  adoptLabel: string;
+  adoptedLabel: string;
+  color: keyof typeof CARD_COLORS;
   status?: "adopted" | "skipped";
   onAdopt: () => void;
   onSkip: () => void;
 }) {
+  const c = CARD_COLORS[color];
   return (
     <div
       className={`rounded-lg border p-3 ${
         status === "skipped"
           ? "border-slate-200 bg-slate-50 opacity-60"
-          : "border-indigo-300 bg-indigo-50/50"
+          : `${c.border} ${c.bg}`
       }`}
     >
-      <div className="text-xs font-semibold text-indigo-700">📋 面談プランの提案</div>
+      <div className={`text-xs font-semibold ${c.title}`}>
+        {icon} {title}
+      </div>
       <pre className="mt-1.5 whitespace-pre-wrap font-sans text-sm text-slate-800">
-        {plan}
+        {body}
       </pre>
       <div className="mt-2 flex items-center gap-2">
         {status === "adopted" && (
-          <span className="text-xs font-medium text-emerald-600">
-            ✓ 面談プランに反映済み
-          </span>
+          <span className="text-xs font-medium text-emerald-600">{adoptedLabel}</span>
         )}
         {status === "skipped" && (
           <span className="text-xs text-slate-400">スキップ済み</span>
@@ -346,9 +395,9 @@ function PlanCard({
           <>
             <button
               onClick={onAdopt}
-              className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-indigo-700"
+              className={`rounded-md px-3 py-1 text-xs font-semibold text-white transition ${c.button}`}
             >
-              面談プランに反映
+              {adoptLabel}
             </button>
             <button
               onClick={onSkip}
