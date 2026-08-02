@@ -126,9 +126,10 @@ export default function InterviewDetail() {
         ))}
       </div>
 
-      {tab === "prep" && (
+      {/* タブ切替でアンマウントしない（考え中のチャットが止まって見えるため）。CSSで隠すだけにする */}
+      <div className={tab === "prep" ? "" : "hidden"}>
         <InterviewCopilot interview={interview} onUpdate={update} />
-      )}
+      </div>
 
       {tab === "result" && (
         <div className="space-y-6">
