@@ -31,6 +31,8 @@ export default function NewInterview() {
       status: "preparing",
       profileNote,
       focusPoints: "",
+      plan: "",
+      copilot: { messages: [], handled: {} },
       checklist: DEFAULT_CHECKLIST.map((label) => ({
         id: uid(),
         label,

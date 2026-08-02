@@ -18,7 +18,7 @@ import {
   POSITION_LABELS,
   SCORE_AXES,
 } from "@/lib/data";
-import QuestionBrainstorm from "@/components/QuestionBrainstorm";
+import InterviewCopilot from "@/components/InterviewCopilot";
 import ResumeImport from "@/components/ResumeImport";
 
 const inputClass =
@@ -220,17 +220,21 @@ export default function InterviewDetail() {
             </ul>
           </section>
 
-          <QuestionBrainstorm
-            interview={interview}
-            onAdopt={(text, intent) =>
-              update({
-                questions: [
-                  ...interview.questions,
-                  { id: uid(), text, intent, asked: false, note: "" },
-                ],
-              })
-            }
-          />
+          <InterviewCopilot interview={interview} onUpdate={update} />
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-semibold">面談の進め方</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              アジェンダ・時間配分。上の相談で「面談プランに反映」すると、ここに入ります。
+            </p>
+            <textarea
+              value={interview.plan}
+              onChange={(e) => update({ plan: e.target.value })}
+              rows={interview.plan ? 8 : 3}
+              placeholder="例: 冒頭5分 アイスブレイク / 15分 直近PJ深掘り / ..."
+              className={`${inputClass} mt-2`}
+            />
+          </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold">質問リスト</h2>

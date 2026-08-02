@@ -38,7 +38,13 @@ export function loadInterviews(): Interview[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as Interview[]) : [];
+    const list = raw ? (JSON.parse(raw) as Interview[]) : [];
+    // 旧バージョンで保存されたデータにフィールドを補完
+    return list.map((i) => ({
+      ...i,
+      plan: i.plan ?? "",
+      copilot: i.copilot ?? { messages: [], handled: {} },
+    }));
   } catch {
     return [];
   }

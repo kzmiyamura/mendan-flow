@@ -8,6 +8,7 @@ export interface SuggestRequest {
     positionDetail: string;
     profileNote: string;
     focusPoints: string;
+    plan: string;
     existingQuestions: string[];
   };
   chat: { role: "user" | "assistant"; content: string }[];
@@ -21,6 +22,7 @@ export interface Suggestion {
 export interface SuggestResponse {
   reply: string;
   suggestions: Suggestion[];
+  planUpdate: string;
 }
 
 const OUTPUT_SCHEMA = {
@@ -29,7 +31,7 @@ const OUTPUT_SCHEMA = {
     reply: {
       type: "string",
       description:
-        "面接官への短い返答。提案の狙いや、候補者情報から読み取ったポイントを1〜3文で。",
+        "面接官への会話の返答。簡潔に（3文程度まで）。判断を仰ぐ問いかけは1つに絞る。",
     },
     suggestions: {
       type: "array",
@@ -45,22 +47,32 @@ const OUTPUT_SCHEMA = {
         required: ["text", "intent"],
         additionalProperties: false,
       },
+      description: "質問を提案するときだけ0〜3個。しないときは空配列。",
+    },
+    planUpdate: {
+      type: "string",
+      description:
+        "面談の進行プラン全体の提案。進め方・時間配分を提案または修正するときだけ、プラン全文をマークダウン箇条書きで（時間配分付き）。変更しないときは空文字。",
     },
   },
-  required: ["reply", "suggestions"],
+  required: ["reply", "suggestions", "planUpdate"],
   additionalProperties: false,
 };
 
-const SYSTEM_PROMPT = `あなたはIT企業の経験豊富なエンジニアリングマネージャーの壁打ち相手です。
-ユーザーは採用の1次面接に技術評価者として入る面接官で、候補者への質問リストを一緒に練り上げようとしています。
+const SYSTEM_PROMPT = `あなたはIT企業の経験豊富なエンジニアリングマネージャーの相棒として、採用1次面接の「面談設計」を面接官と会話しながら一緒に決めていきます。ユーザーは技術評価者として1次面接に入る面接官です。
 
-役割:
-- 候補者の経歴メモ・深掘りポイントを踏まえ、その候補者に固有の質問を提案する（汎用質問の焼き直しは避ける）
-- 経歴の曖昧な点・盛っていそうな点を見抜く質問、実務の深さを確かめる質問を重視する
-- 既にリストにある質問と重複しない
-- 1回の応答で質問案は1〜3個。数より質
-- ユーザーが方向性を指定したら（例:「もっとチーム面を聞きたい」）、その角度で提案し直す
-- 質問文は面接でそのまま口に出せる自然な日本語にする`;
+一緒に決めていくこと:
+- 面談の進め方（アジェンダ・時間配分・重点テーマ）→ planUpdate で提案
+- 候補者に合わせた質問 → suggestions で提案
+- 評価の観点や懸念の擦り合わせ → reply の会話の中で
+
+会話のスタンス:
+- 一方的に完成品を押し付けず、会話で決めていく。提案には「なぜそうするか」を短く添え、判断が分かれる点は面接官に問いかける（問いかけは1回に1つ）
+- 経歴メモ・深掘りポイント・現在のプラン・既存質問を必ず踏まえ、その候補者に固有の内容にする
+- 面談時間が不明なら早めに確認する（時間配分の前提になるため）
+- planUpdate は進行プランを提案・修正するときだけ全文を出す（部分差分ではなく反映すればそのまま使える全文）。変更がなければ空文字
+- suggestions は質問を提案するときだけ0〜3個。既存質問と重複しない。質問文はそのまま口に出せる自然な日本語で
+- reply は簡潔に。長い説明はプランや質問の中に入れる`;
 
 export async function POST(req: Request) {
   let body: SuggestRequest;
@@ -82,6 +94,9 @@ ${context.profileNote || "（未記入）"}
 # 深掘りしたいポイント
 ${context.focusPoints || "（未記入）"}
 
+# 現在の面談プラン
+${context.plan || "（未作成）"}
+
 # 既にリストにある質問（重複を避けること）
 ${context.existingQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n") || "（なし）"}`;
 
@@ -89,14 +104,21 @@ ${context.existingQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n") || "（�
     .map((m) =>
       m.role === "user"
         ? `面接官: ${m.content}`
-        : `あなたの過去の提案(JSON): ${m.content}`
+        : `あなたの過去の応答(JSON): ${m.content}`
     )
     .join("\n\n");
 
   const prompt =
     chat.length === 0
-      ? `${contextText}\n\nこの候補者向けの質問を一緒に考えてください。まず候補者情報から気になる点を踏まえて提案してください。`
-      : `${contextText}\n\n# これまでの壁打ちのやり取り\n${transcript}\n\n最後の面接官の発言を踏まえて、次の提案をしてください。`;
+      ? `${contextText}
+
+候補者情報を踏まえて、この面談の設計を始めてください。まず進め方の叩き台（planUpdate）を出し、前提として確認したいこと（面談時間など）があれば1つだけ聞いてください。`
+      : `${contextText}
+
+# これまでの相談のやり取り
+${transcript}
+
+最後の面接官の発言を踏まえて応答してください。`;
 
   try {
     let structured: unknown = null;
@@ -123,7 +145,7 @@ ${context.existingQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n") || "（�
     if (!structured) {
       return NextResponse.json(
         {
-          error: `提案の生成に失敗しました${failureReason ? `（${failureReason}）` : ""}。もう一度お試しください。`,
+          error: `応答の生成に失敗しました${failureReason ? `（${failureReason}）` : ""}。もう一度お試しください。`,
         },
         { status: 502 }
       );
@@ -135,7 +157,7 @@ ${context.existingQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n") || "（�
     return NextResponse.json(
       {
         error:
-          "Claudeの実行に失敗しました。このマシンでClaude Codeにログイン済みか（claude /login）確認してください。",
+          "Claudeの実行に失敗しました。このマシンでClaude Codeにログイン済みか確認してください。",
       },
       { status: 500 }
     );

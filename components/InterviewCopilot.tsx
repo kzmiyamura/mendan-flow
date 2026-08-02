@@ -1,0 +1,336 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { CopilotMessage, Interview } from "@/lib/types";
+import { POSITION_LABELS } from "@/lib/data";
+import { uid } from "@/lib/storage";
+import type { SuggestResponse } from "@/app/api/suggest/route";
+
+const QUICK_CHIPS = [
+  "時間配分を相談したい",
+  "質問をもっと考えたい",
+  "評価の観点を整理したい",
+];
+
+function parseAssistant(content: string): SuggestResponse | null {
+  try {
+    const parsed = JSON.parse(content) as SuggestResponse;
+    if (typeof parsed.reply !== "string") return null;
+    return {
+      reply: parsed.reply,
+      suggestions: parsed.suggestions ?? [],
+      planUpdate: parsed.planUpdate ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export default function InterviewCopilot({
+  interview,
+  onUpdate,
+}: {
+  interview: Interview;
+  onUpdate: (patch: Partial<Interview>) => void;
+}) {
+  const copilot = interview.copilot;
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const prevCount = useRef(copilot.messages.length);
+
+  useEffect(() => {
+    if (copilot.messages.length > prevCount.current || loading) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    prevCount.current = copilot.messages.length;
+  }, [copilot.messages.length, loading]);
+
+  async function send(text: string | null) {
+    setLoading(true);
+    setError(null);
+    const next: CopilotMessage[] = text
+      ? [...copilot.messages, { role: "user", content: text }]
+      : [...copilot.messages];
+    if (text) {
+      onUpdate({ copilot: { ...copilot, messages: next } });
+      setInput("");
+    }
+
+    try {
+      const res = await fetch("/api/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context: {
+            candidateName: interview.candidateName,
+            position: POSITION_LABELS[interview.position],
+            positionDetail: interview.positionDetail,
+            profileNote: interview.profileNote,
+            focusPoints: interview.focusPoints,
+            plan: interview.plan,
+            existingQuestions: interview.questions.map((q) => q.text),
+          },
+          chat: next,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? `エラーが発生しました (${res.status})`);
+        return;
+      }
+      onUpdate({
+        copilot: {
+          ...copilot,
+          messages: [...next, { role: "assistant", content: JSON.stringify(data) }],
+        },
+      });
+    } catch {
+      setError("通信に失敗しました。サーバーが起動しているか確認してください。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function markHandled(key: string, status: "adopted" | "skipped", extra?: Partial<Interview>) {
+    onUpdate({
+      ...extra,
+      copilot: {
+        ...copilot,
+        handled: { ...copilot.handled, [key]: status },
+      },
+    });
+  }
+
+  function adoptQuestion(key: string, text: string, intent: string) {
+    markHandled(key, "adopted", {
+      questions: [
+        ...interview.questions,
+        { id: uid(), text, intent, asked: false, note: "" },
+      ],
+    });
+  }
+
+  function adoptPlan(key: string, plan: string) {
+    markHandled(key, "adopted", { plan });
+  }
+
+  const started = copilot.messages.length > 0 || loading;
+
+  return (
+    <section className="rounded-lg border border-sky-200 bg-sky-50/50 p-4">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold">🤝 面談設計を一緒に進める</h2>
+        <span className="text-xs text-slate-500">
+          進め方・時間配分・質問をClaudeと会話しながら決めます
+        </span>
+      </div>
+
+      {!started && (
+        <button
+          onClick={() => send(null)}
+          className="mt-3 w-full rounded-lg border border-sky-600 bg-white py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100"
+        >
+          この候補者の面談設計を始める
+        </button>
+      )}
+
+      {copilot.messages.length > 0 && (
+        <div className="mt-3 max-h-[32rem] space-y-3 overflow-y-auto pr-1">
+          {copilot.messages.map((msg, mi) => {
+            if (msg.role === "user") {
+              return (
+                <div
+                  key={mi}
+                  className="ml-10 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <span className="mr-1 text-xs text-slate-400">あなた</span>
+                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                </div>
+              );
+            }
+            const parsed = parseAssistant(msg.content);
+            if (!parsed) return null;
+            return (
+              <div key={mi} className="mr-6 space-y-2">
+                <div className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm">
+                  <span className="mr-1 text-xs text-sky-600">Claude</span>
+                  <span className="whitespace-pre-wrap">{parsed.reply}</span>
+                </div>
+
+                {parsed.planUpdate && (
+                  <PlanCard
+                    plan={parsed.planUpdate}
+                    status={copilot.handled[`${mi}:plan`]}
+                    onAdopt={() => adoptPlan(`${mi}:plan`, parsed.planUpdate)}
+                    onSkip={() => markHandled(`${mi}:plan`, "skipped")}
+                  />
+                )}
+
+                {parsed.suggestions.map((s, si) => {
+                  const key = `${mi}:s${si}`;
+                  const status = copilot.handled[key];
+                  return (
+                    <div
+                      key={key}
+                      className={`rounded-lg border p-3 ${
+                        status === "skipped"
+                          ? "border-slate-200 bg-slate-50 opacity-60"
+                          : "border-sky-300 bg-white"
+                      }`}
+                    >
+                      <div className="text-sm font-medium">{s.text}</div>
+                      <div className="mt-0.5 text-xs text-sky-700">
+                        ねらい: {s.intent}
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        {status === "adopted" && (
+                          <span className="text-xs font-medium text-emerald-600">
+                            ✓ 質問リストに追加済み
+                          </span>
+                        )}
+                        {status === "skipped" && (
+                          <span className="text-xs text-slate-400">スキップ済み</span>
+                        )}
+                        {!status && (
+                          <>
+                            <button
+                              onClick={() => adoptQuestion(key, s.text, s.intent)}
+                              className="rounded-md bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-sky-700"
+                            >
+                              質問リストに採用
+                            </button>
+                            <button
+                              onClick={() => markHandled(key, "skipped")}
+                              className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-500 transition hover:bg-slate-100"
+                            >
+                              スキップ
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          {loading && (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-sky-600 border-t-transparent" />
+              考え中…
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      )}
+
+      {!copilot.messages.length && loading && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-sky-600 border-t-transparent" />
+          候補者情報を読んで叩き台を作成中…
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {started && (
+        <>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {QUICK_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                onClick={() => !loading && send(chip)}
+                disabled={loading}
+                className="rounded-full border border-sky-300 bg-white px-3 py-1 text-xs text-sky-700 transition hover:bg-sky-100 disabled:opacity-50"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && input.trim() && !loading) {
+                  e.preventDefault();
+                  send(input.trim());
+                }
+              }}
+              placeholder="例: 面談は45分。技術深掘りを厚めにしたい"
+              disabled={loading}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none disabled:bg-slate-100"
+            />
+            <button
+              onClick={() => input.trim() && send(input.trim())}
+              disabled={loading || !input.trim()}
+              className="shrink-0 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:bg-slate-300"
+            >
+              送信
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function PlanCard({
+  plan,
+  status,
+  onAdopt,
+  onSkip,
+}: {
+  plan: string;
+  status?: "adopted" | "skipped";
+  onAdopt: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-lg border p-3 ${
+        status === "skipped"
+          ? "border-slate-200 bg-slate-50 opacity-60"
+          : "border-indigo-300 bg-indigo-50/50"
+      }`}
+    >
+      <div className="text-xs font-semibold text-indigo-700">📋 面談プランの提案</div>
+      <pre className="mt-1.5 whitespace-pre-wrap font-sans text-sm text-slate-800">
+        {plan}
+      </pre>
+      <div className="mt-2 flex items-center gap-2">
+        {status === "adopted" && (
+          <span className="text-xs font-medium text-emerald-600">
+            ✓ 面談プランに反映済み
+          </span>
+        )}
+        {status === "skipped" && (
+          <span className="text-xs text-slate-400">スキップ済み</span>
+        )}
+        {!status && (
+          <>
+            <button
+              onClick={onAdopt}
+              className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-indigo-700"
+            >
+              面談プランに反映
+            </button>
+            <button
+              onClick={onSkip}
+              className="rounded-md border border-slate-300 px-3 py-1 text-xs text-slate-500 transition hover:bg-slate-100"
+            >
+              スキップ
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

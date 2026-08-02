@@ -32,6 +32,18 @@ export interface InterviewResult {
   handover: string;
 }
 
+export interface CopilotMessage {
+  role: "user" | "assistant";
+  /** assistantの場合はSuggestResponseのJSON文字列 */
+  content: string;
+}
+
+export interface CopilotState {
+  messages: CopilotMessage[];
+  /** 提案カードの処理状態。キーは `${msgIndex}:s${sugIndex}` または `${msgIndex}:plan` */
+  handled: Record<string, "adopted" | "skipped">;
+}
+
 export interface Interview {
   id: string;
   candidateName: string;
@@ -41,6 +53,9 @@ export interface Interview {
   status: "preparing" | "done";
   profileNote: string;
   focusPoints: string;
+  /** 面談の進め方（アジェンダ・時間配分・重点テーマ） */
+  plan: string;
+  copilot: CopilotState;
   checklist: ChecklistItem[];
   questions: Question[];
   result: InterviewResult;
