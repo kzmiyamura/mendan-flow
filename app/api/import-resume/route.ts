@@ -38,15 +38,75 @@ const SYSTEM_PROMPT = `あなたはIT企業のエンジニアリングマネー�
 
 評価や合否の推測はせず、事実の整理と確認すべき点の洗い出しに徹してください。`;
 
+type PdfProbe =
+  | { kind: "plain" }
+  | { kind: "decrypted"; text: string }
+  | { kind: "need_password" }
+  | { kind: "wrong_password" };
+
+function isPasswordException(e: unknown): e is { name: string; code: number } {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    (e as { name?: string }).name === "PasswordException"
+  );
+}
+
+async function probePdf(buffer: Buffer, password: string | null): Promise<PdfProbe> {
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+  // まずパスワードなしで開けるか確認（開ければ暗号化なし扱い → 元ファイルをそのまま使う）
+  try {
+    const doc = await getDocument({ data: new Uint8Array(buffer) }).promise;
+    await doc.destroy();
+    return { kind: "plain" };
+  } catch (e) {
+    if (!isPasswordException(e)) throw e;
+  }
+
+  if (!password) return { kind: "need_password" };
+
+  try {
+    const doc = await getDocument({
+      data: new Uint8Array(buffer),
+      password,
+    }).promise;
+
+    let text = "";
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      let lastY: number | null = null;
+      for (const item of content.items) {
+        if (!("str" in item)) continue;
+        const y = item.transform[5] as number;
+        if (lastY !== null && Math.abs(y - lastY) > 2) text += "\n";
+        else if (text && !text.endsWith("\n")) text += " ";
+        text += item.str;
+        lastY = y;
+      }
+      text += "\n\n";
+    }
+    await doc.destroy();
+    return { kind: "decrypted", text };
+  } catch (e) {
+    if (isPasswordException(e)) return { kind: "wrong_password" };
+    throw e;
+  }
+}
+
 export async function POST(req: Request) {
   let file: File;
   let position: string;
+  let password: string | null;
   try {
     const formData = await req.formData();
     const f = formData.get("file");
     if (!(f instanceof File)) throw new Error("no file");
     file = f;
     position = String(formData.get("position") ?? "");
+    const p = formData.get("password");
+    password = typeof p === "string" && p.length > 0 ? p : null;
   } catch {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });
   }
@@ -59,9 +119,55 @@ export async function POST(req: Request) {
     );
   }
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+  let decryptedText: string | null = null;
+
+  if (ext === "pdf") {
+    let probe: PdfProbe;
+    try {
+      probe = await probePdf(buffer, password);
+    } catch (e) {
+      console.error("pdf probe error:", e);
+      return NextResponse.json(
+        { error: "PDFの読み込みに失敗しました。ファイルが壊れていないか確認してください。" },
+        { status: 400 }
+      );
+    }
+
+    if (probe.kind === "need_password") {
+      return NextResponse.json(
+        {
+          needPassword: true,
+          error: "このPDFはパスワードで保護されています。パスワードを入力してください。",
+        },
+        { status: 401 }
+      );
+    }
+    if (probe.kind === "wrong_password") {
+      return NextResponse.json(
+        { needPassword: true, error: "パスワードが違います。" },
+        { status: 401 }
+      );
+    }
+    if (probe.kind === "decrypted") {
+      if (probe.text.trim().length < 30) {
+        return NextResponse.json(
+          {
+            error:
+              "パスワードは解除できましたが、テキストを抽出できませんでした（スキャン画像のPDFの可能性があります）。",
+          },
+          { status: 422 }
+        );
+      }
+      decryptedText = probe.text;
+    }
+  }
+
   const dir = await mkdtemp(join(tmpdir(), "mendan-resume-"));
-  const filePath = join(dir, `resume.${ext}`);
-  await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
+  const filePath = decryptedText
+    ? join(dir, "resume.txt")
+    : join(dir, `resume.${ext}`);
+  await writeFile(filePath, decryptedText ?? buffer);
 
   try {
     let structured: unknown = null;
@@ -69,7 +175,7 @@ export async function POST(req: Request) {
 
     for await (const message of query({
       prompt: `候補者の経歴書ファイルを Read ツールで読んで分析してください。
-ファイルパス: ${filePath}
+ファイルパス: ${filePath}${decryptedText ? "\n（パスワード付きPDFから抽出したテキストです。レイアウトが崩れている場合があります）" : ""}
 応募ポジション: ${position || "（未指定）"}`,
       options: {
         systemPrompt: SYSTEM_PROMPT,
