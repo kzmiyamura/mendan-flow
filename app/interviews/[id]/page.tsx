@@ -19,6 +19,7 @@ import {
   SCORE_AXES,
 } from "@/lib/data";
 import QuestionBrainstorm from "@/components/QuestionBrainstorm";
+import ResumeImport from "@/components/ResumeImport";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-sky-500 focus:outline-none";
@@ -153,7 +154,24 @@ export default function InterviewDetail() {
       {tab === "prep" && (
         <div className="space-y-6">
           <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold">経歴・スキルシートのメモ</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">経歴・スキルシートのメモ</h2>
+            </div>
+            <div className="mt-2">
+              <ResumeImport
+                position={`${POSITION_LABELS[interview.position]}${interview.positionDetail ? ` / ${interview.positionDetail}` : ""}`}
+                onImported={(result) =>
+                  update({
+                    profileNote: interview.profileNote
+                      ? `${interview.profileNote}\n\n--- 経歴書から自動生成 ---\n${result.profileNote}`
+                      : result.profileNote,
+                    focusPoints: interview.focusPoints
+                      ? `${interview.focusPoints}\n\n--- 経歴書から自動生成 ---\n${result.focusPoints}`
+                      : result.focusPoints,
+                  })
+                }
+              />
+            </div>
             <textarea
               value={interview.profileNote}
               onChange={(e) => update({ profileNote: e.target.value })}
