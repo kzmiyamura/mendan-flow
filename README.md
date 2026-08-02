@@ -29,14 +29,15 @@ SESのIT面談（クライアント面談・顔合わせ）の**準備**から**
 
 - [Next.js](https://nextjs.org)（App Router / TypeScript）
 - Tailwind CSS
-- [Claude API](https://platform.claude.com)（`@anthropic-ai/sdk` / claude-opus-4-8）
+- [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk)（AI壁打ち機能）
 
 ## 開発
 
 ```bash
 npm install
-cp .env.example .env.local   # ANTHROPIC_API_KEY を設定（AI壁打ち機能に必要）
 npm run dev
 ```
 
-http://localhost:3000 で起動します。APIキーがなくてもAI壁打ち以外の機能は動作します。
+http://localhost:3000 で起動します。
+
+AI壁打ち機能は、このマシンのClaude Codeのログイン情報（Pro/Max契約）を使います。APIキーは不要ですが、`claude` CLIでログイン済みである必要があります。ログインしていなくてもAI壁打ち以外の機能は動作します。

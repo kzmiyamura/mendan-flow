@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.220",
     "next": "16.2.12",
     "react": "19.2.4",
     "react-dom": "19.2.4"

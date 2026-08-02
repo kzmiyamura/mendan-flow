@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { NextResponse } from "next/server";
 
 export interface SuggestRequest {
@@ -37,7 +37,10 @@ const OUTPUT_SCHEMA = {
         type: "object",
         properties: {
           text: { type: "string", description: "質問文そのもの" },
-          intent: { type: "string", description: "この質問で何を見極めたいか（短く）" },
+          intent: {
+            type: "string",
+            description: "この質問で何を見極めたいか（短く）",
+          },
         },
         required: ["text", "intent"],
         additionalProperties: false,
@@ -46,7 +49,7 @@ const OUTPUT_SCHEMA = {
   },
   required: ["reply", "suggestions"],
   additionalProperties: false,
-} as const;
+};
 
 const SYSTEM_PROMPT = `あなたはIT企業の経験豊富なエンジニアリングマネージャーの壁打ち相手です。
 ユーザーは採用の1次面接に技術評価者として入る面接官で、候補者への質問リストを一緒に練り上げようとしています。
@@ -80,59 +83,61 @@ ${context.profileNote || "（未記入）"}
 ${context.focusPoints || "（未記入）"}
 
 # 既にリストにある質問（重複を避けること）
-${context.existingQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n") || "（なし）"}
+${context.existingQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n") || "（なし）"}`;
 
-この候補者向けの質問を一緒に考えてください。まず候補者情報から気になる点を踏まえて提案してください。`;
+  const transcript = chat
+    .map((m) =>
+      m.role === "user"
+        ? `面接官: ${m.content}`
+        : `あなたの過去の提案(JSON): ${m.content}`
+    )
+    .join("\n\n");
 
-  const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: contextText },
-    ...chat.map((m) => ({ role: m.role, content: m.content })),
-  ];
-
-  const client = new Anthropic();
+  const prompt =
+    chat.length === 0
+      ? `${contextText}\n\nこの候補者向けの質問を一緒に考えてください。まず候補者情報から気になる点を踏まえて提案してください。`
+      : `${contextText}\n\n# これまでの壁打ちのやり取り\n${transcript}\n\n最後の面接官の発言を踏まえて、次の提案をしてください。`;
 
   try {
-    const response = await client.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 4096,
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: OUTPUT_SCHEMA },
+    let structured: unknown = null;
+    let failureReason: string | null = null;
+
+    for await (const message of query({
+      prompt,
+      options: {
+        systemPrompt: SYSTEM_PROMPT,
+        maxTurns: 1,
+        tools: [],
+        outputFormat: { type: "json_schema", schema: OUTPUT_SCHEMA },
       },
-      system: SYSTEM_PROMPT,
-      messages,
-    });
+    })) {
+      if (message.type === "result") {
+        if (message.subtype === "success") {
+          structured = message.structured_output;
+        } else {
+          failureReason = message.subtype;
+        }
+      }
+    }
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
+    if (!structured) {
       return NextResponse.json(
-        { error: "モデルから回答を取得できませんでした" },
+        {
+          error: `提案の生成に失敗しました${failureReason ? `（${failureReason}）` : ""}。もう一度お試しください。`,
+        },
         { status: 502 }
       );
     }
 
-    const parsed = JSON.parse(textBlock.text) as SuggestResponse;
-    return NextResponse.json(parsed);
+    return NextResponse.json(structured as SuggestResponse);
   } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError) {
-      return NextResponse.json(
-        { error: "APIキーが未設定または無効です。.env.local の ANTHROPIC_API_KEY を確認してください。" },
-        { status: 401 }
-      );
-    }
-    if (error instanceof Anthropic.RateLimitError) {
-      return NextResponse.json(
-        { error: "レート制限中です。少し待ってから再試行してください。" },
-        { status: 429 }
-      );
-    }
-    if (error instanceof Anthropic.APIError) {
-      return NextResponse.json(
-        { error: `Claude APIエラー: ${error.message}` },
-        { status: 502 }
-      );
-    }
-    throw error;
+    console.error("suggest route error:", error);
+    return NextResponse.json(
+      {
+        error:
+          "Claudeの実行に失敗しました。このマシンでClaude Codeにログイン済みか（claude /login）確認してください。",
+      },
+      { status: 500 }
+    );
   }
 }
